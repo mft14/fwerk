@@ -1,0 +1,162 @@
+// (C) 2017, made by Karim Kiel
+// ein IT Projekt für die Jobelmannschule Stade
+//  Version 1.0
+// Bibliotheken von Tale (herunterladbar auf www.taletn.com/reaper/mono_synth/)
+
+
+desc:FWerk Synthesizer
+
+
+slider1:0.5<0.0,1,0.01>Volume (%)
+slider2:2<0,10,1{Sine,Triangle,Square,Sawtooth,Hammond,Stairs,Half-Wave Rectified Sine,Full-Wave Rectified Sine,Modified Triangle,Trapzoid}>Waveform
+slider3:1<0,1,1{Mono,Poly}>Mode
+slider4:0<0,5000,1>Attack (ms)
+slider5:0<0,10000,1>Decay (ms)
+slider6:0<-120,24,1>Sustain (dB)
+slider7:0<0,5000,1>Release (ms)
+slider8:0<0,3,1{Off,White Noise,Pink Noise,Brown Noise}>Noise Generator
+slider9:0<-1200,1200,1>Pitch Shifter (cents)
+
+import FWerk/sine_oscillator.jsfx-inc
+import FWerk/midi_queue.jsfx-inc
+import FWerk/poly_blep.jsfx-inc
+import FWerk/adsr.jsfx-inc
+import FWerk/noise_generator.jsfx-inc
+import FWerk/malloc.jsfx-inc
+import FWerk/array.jsfx-inc
+
+
+@slider
+  vol = 2 ^ (slider1/6);
+  adj = 2 ^ (slider9/1200)/srate;
+  wave = int(slider2);  
+  color = int (slider8);
+  mode = slider3 >= 0.5;
+   
+  adsr.adsr_seta(slider4*0.001);
+  adsr.adsr_setd(slider5*0.001);
+  adsr.adsr_sets(10^(0.05*slider6));
+  adsr.adsr_setr(slider7*0.001);
+  
+@init
+
+function int(x) ( x|0 );
+
+array.array_alloc(128, 3);
+midiq.midiq_alloc(256);
+
+@block
+
+   // Sammelt MIDI Informationen und fügt sie der Warteschlange hinzu
+   midiq.midiq_collect();
+
+@sample
+
+while(midiq.midiq_remove()) (
+  status = midiq.msg1 & 0xF0;
+  note = cc = midiq.msg2;
+  velocity = midiq.msg3;
+
+  // Note On
+  status == 0x90 && velocity ? (
+    // Entfernt Note, falls eine spielen sollte
+    ptr = array.array_find(note);
+    ptr >= 0 ? array.array_remove(ptr);
+    adsr.adsr_a(velocity / 127);
+
+    // Oszillator Frequenz und Phase richten
+    osc.poly_sync(0);    
+    osc.poly_setf(440 * 2^((note - 69) / 12 + (slider9/1200)  )  );
+    
+    // Noten hinzufügen
+    ptr = array.array_add();
+    ptr[0] = note;
+    ptr[1] = osc.t;
+    ptr[2] = osc.dt;
+  ) :
+
+  // Note Off
+  status == 0x80 || (status == 0x90 && !velocity) ? (
+    ptr = array.array_find(note);
+    ptr >= 0 ? array.array_remove(ptr);
+    adsr.adsr_r();
+    
+  ) :
+
+  // All Notes Off
+  status == 0xB0 && cc == 123 ? (
+    array.array_clear();
+  );
+);
+
+out = 0.0;
+
+ptr = mode ? array.array_first() : array.array_last();
+while(ptr >= 0) (
+  // Oszillator Frequenz und Phase erhalten
+ 
+  osc.poly_sync(ptr[1]);
+  osc.poly_setdt(ptr[2]);
+
+  // verschiedenen Oszillator Funktionen
+  out += 
+  
+  wave == 0  ? osc.poly_sin() :
+  wave == 1  ? osc.poly_tri() :
+  wave == 2  ? osc.poly_sqr() :
+  wave == 3  ? osc.poly_saw() :
+  wave == 4  ? osc.poly_ham() :
+  wave == 5  ? osc.poly_stairs() :
+  wave == 6  ? osc.poly_half() : //half wave rectified sine
+  wave == 7  ? osc.poly_full() : //full wave rectified sine
+  wave == 8  ? osc.poly_tri2() : //modified triangle
+  wave == 9  ? osc.poly_trap2() ; // Trapzoid
+
+
+  // Phase aktualisieren
+  ptr[1] = osc.t;
+
+  ptr = array.array_next(ptr);
+  //Poly Output
+  adsr.adsr_process() ? spl0 = spl1 = slider1 * adsr.env * out
+  *  
+   (
+  
+  color == 0 ? 1 :
+  color == 1 ? rng.lcg_pink() :
+  color == 2 ? rng.lcg_white() :
+  color == 3 ? rng.lcg_brown();
+  
+   );
+);
+// Mono Output
+mode <= 0.5 ?  adsr.adsr_process() ? spl0 = spl1 = slider1 * adsr.env * 
+
+(
+
+  wave == 0  ? osc.poly_sin() :
+  wave == 1  ? osc.poly_tri() :
+  wave == 2  ? osc.poly_sqr() :
+  wave == 3  ? osc.poly_saw() :
+  wave == 4  ? osc.poly_ham() :
+  wave == 5  ? osc.poly_stairs() :
+  wave == 6  ? osc.poly_half() : //half wave rectified sine
+  wave == 7  ? osc.poly_full() : //full wave rectified sine
+  wave == 8  ? osc.poly_tri2() : //modified triangle
+  wave == 9  ? osc.poly_trap2() ; // Trapzoid
+
+)
+*
+ (
+
+color == 0 ? 1 :
+color == 1 ? rng.lcg_pink() :
+color == 2 ? rng.lcg_white() :
+color == 3 ? rng.lcg_brown();
+
+ );
+   
+  
+
+
+

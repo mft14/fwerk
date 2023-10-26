@@ -1,0 +1,23 @@
+// (C) 2017, made by Karim Kiel
+// ein IT Projekt für die Jobelmannschule Stade
+//  
+// Bibliotheken von Tale (herunterladbar auf www.taletn.com/reaper/mono_synth/)
+
+
+desc:FWerk RC Filter
+
+
+slider1:1000<0,20000,1>Cutoff (Hz)
+slider2:0<0,4,1{Low-Pass,High-Pass,All-Pass,Notch,Band-Pass}>Type
+
+import FWerk/poly_blep.jsfx-inc
+import FWerk/rc_filter.jsfx-inc
+
+
+
+@slider
+lp_hp.rc_setf(slider1);
+
+@sample
+mono = 0.5 * (spl0 + spl1);
+spl0 = spl1 = (slider2 < 0.5 ? lp_hp.rc_lp(mono) : lp_hp.rc_hp(mono));
